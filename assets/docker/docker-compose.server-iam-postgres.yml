@@ -1,8 +1,8 @@
 services:
-  jbst-server:
+  jbst-server-iam:
     image: ghcr.io/yyluchkiv/jbst-server-iam:1.76-SNAPSHOT
     restart: "no"
-    container_name: jbst-server
+    container_name: jbst-server-iam
     networks:
       - network-jbst
     ports:
@@ -15,11 +15,11 @@ services:
     environment:
       - PORT=3002
       - SPRING_BOOT_PROFILE=postgres
-      - CONFIG_LOCATIONS=classpath:application.yml,classpath:application-dev.yml,classpath:application-postgres.yml,file:/application-docker-postgres.yml
+      - CONFIG_LOCATIONS=classpath:application.yml,classpath:application-dev.yml,classpath:application-postgres.yml,file:/application-server-iam-docker-postgres.yml
       - JASYPT_PASSWORD=JJJJBSTGH
       - JVM_ARGUMENTS=-Xmx5g -XX:+UseZGC -XX:+ZGenerational --add-opens=java.base/java.time=ALL-UNNAMED
     volumes:
-      - ./application-docker-postgres.yml:/application-docker-postgres.yml
+      - ./application-server-iam-docker-postgres.yml:/application-server-iam-docker-postgres.yml
 
   jbst-database-postgres:
     image: postgres:14.3
@@ -33,7 +33,7 @@ services:
       - POSTGRES_PASSWORD=postgres
     volumes:
       - volume-jbst-postgres:/var/lib/postgresql/data
-      - ./init-postgres-database.sh:/docker-entrypoint-initdb.d/init-database.sh
+      - ./init-server-iam-postgres-database.sh:/docker-entrypoint-initdb.d/init-database.sh
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s

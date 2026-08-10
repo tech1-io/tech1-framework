@@ -4,8 +4,8 @@ PREFIX="[NextRelease]"
 # Deploy flags/version live in a plain env file, NOT in .github/workflows/main.yml —
 # the release workflow's GITHUB_TOKEN cannot push commits that modify workflow files.
 DEPLOYMENT_ENV_FILE=".github/deployment.env"
-DOCKER_COMPOSE_MONGO_PATH="assets/docker/docker-compose.mongo.yml"
-DOCKER_COMPOSE_POSTGRES_PATH="assets/docker/docker-compose.postgres.yml"
+DOCKER_COMPOSE_MONGO_PATH="assets/docker/docker-compose.server-iam-mongo.yml"
+DOCKER_COMPOSE_POSTGRES_PATH="assets/docker/docker-compose.server-iam-postgres.yml"
 
 # In-place sed differs between macOS and Linux: BSD sed (macOS) requires a backup-suffix
 # argument after -i ('' = no backup file), GNU sed (Linux, used by the release.yml runner)
