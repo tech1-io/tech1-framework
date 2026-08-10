@@ -1,11 +1,23 @@
 # Resource Burner API — IntelliJ HTTP Client
 # Select environment (dev/production) in the run gutter; base URLs live in http-client.env.json
+#
+# Tuning params on the start endpoints (all optional):
+#   everySeconds — growth step interval, seconds (1-3600, default 10)
+#   threads      — CPU burner threads added per step (1-256, default 1)
+#   chunkMB      — RAM chunk retained per step, MB (1-1024, default 50)
+# Re-calling start while growing retunes the speed without restarting.
 
 ### Status
 GET {{baseUrl}}/resource-burner/status
 
-### CPU + RAM: start
+### CPU + RAM: start (default speed)
 POST {{baseUrl}}/resource-burner/start
+
+### CPU + RAM: start — really fast
+POST {{baseUrl}}/resource-burner/start?everySeconds=1&threads=4&chunkMB=500
+
+### CPU + RAM: start — really slow
+POST {{baseUrl}}/resource-burner/start?everySeconds=600&threads=1&chunkMB=10
 
 ### CPU + RAM: stop (freeze growth, keep load)
 POST {{baseUrl}}/resource-burner/stop
@@ -13,8 +25,14 @@ POST {{baseUrl}}/resource-burner/stop
 ### CPU + RAM: clean (release everything)
 POST {{baseUrl}}/resource-burner/clean
 
-### CPU: start
+### CPU: start (default speed)
 POST {{baseUrl}}/resource-burner/cpu/start
+
+### CPU: start — really fast
+POST {{baseUrl}}/resource-burner/cpu/start?everySeconds=1&threads=8
+
+### CPU: start — really slow
+POST {{baseUrl}}/resource-burner/cpu/start?everySeconds=600&threads=1
 
 ### CPU: stop
 POST {{baseUrl}}/resource-burner/cpu/stop
@@ -22,8 +40,14 @@ POST {{baseUrl}}/resource-burner/cpu/stop
 ### CPU: clean
 POST {{baseUrl}}/resource-burner/cpu/clean
 
-### RAM: start
+### RAM: start (default speed)
 POST {{baseUrl}}/resource-burner/ram/start
+
+### RAM: start — really fast
+POST {{baseUrl}}/resource-burner/ram/start?everySeconds=1&chunkMB=500
+
+### RAM: start — really slow
+POST {{baseUrl}}/resource-burner/ram/start?everySeconds=600&chunkMB=10
 
 ### RAM: stop
 POST {{baseUrl}}/resource-burner/ram/stop

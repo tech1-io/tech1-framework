@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 
 public record ResourceBurnerRamStatus(
         boolean growing,
+        int everySeconds,
+        int chunkMB,
         int chunks,
         long retainedMB,
         BigDecimal retainedPercentage,
