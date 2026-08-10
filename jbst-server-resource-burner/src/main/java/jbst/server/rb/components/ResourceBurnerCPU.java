@@ -1,17 +1,23 @@
 package jbst.server.rb.components;
 
+import com.sun.management.OperatingSystemMXBean;
 import jakarta.annotation.PreDestroy;
 import jbst.server.rb.domain.ResourceBurnerCpuStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.lang.management.ManagementFactory;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
+
+import static jbst.foundation.domain.tuples.TuplePercentage.progressTuplePercentage;
+import static jbst.foundation.domain.numbers.JbstNumbers.scale;
 
 /**
  * Burns CPU by spinning daemon platform threads in a busy math loop.
@@ -23,6 +29,8 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 @Component
 public class ResourceBurnerCPU {
+
+    private static final OperatingSystemMXBean OS_MX_BEAN = (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
 
     private final ReentrantLock lock = new ReentrantLock();
     private final AtomicInteger counter = new AtomicInteger();
@@ -61,6 +69,8 @@ public class ResourceBurnerCPU {
         this.lock.lock();
         try {
             this.growing = false;
+            var status = this.getStatus();
+            LOGGER.info("Resource Burner CPU — growth frozen, live threads: {}/{} cores ({}%), system CPU load: {}%", status.threads(), status.availableProcessors(), status.threadsPercentage(), status.systemCpuLoadPercentage());
         } finally {
             this.lock.unlock();
         }
@@ -73,17 +83,21 @@ public class ResourceBurnerCPU {
             this.burning.set(false);
             this.burning = new AtomicBoolean(true);
             this.threads.clear();
-            LOGGER.info("Resource Burner CPU — cleaned, all burner threads terminating");
+            LOGGER.info("Resource Burner CPU — cleaned, all burner threads terminating, system CPU load: {}%", systemCpuLoadPercentage());
         } finally {
             this.lock.unlock();
         }
     }
 
     public ResourceBurnerCpuStatus getStatus() {
+        var liveThreads = this.threads.stream().filter(Thread::isAlive).count();
+        var availableProcessors = Runtime.getRuntime().availableProcessors();
         return new ResourceBurnerCpuStatus(
                 this.growing,
-                this.threads.stream().filter(Thread::isAlive).count(),
-                Runtime.getRuntime().availableProcessors()
+                liveThreads,
+                availableProcessors,
+                progressTuplePercentage(liveThreads, availableProcessors).percentage(),
+                systemCpuLoadPercentage()
         );
     }
 
@@ -106,6 +120,13 @@ public class ResourceBurnerCPU {
                     this.sink = x;
                 });
         this.threads.add(thread);
-        LOGGER.info("Resource Burner CPU — burner thread #{} started, live threads: {}", id, this.getStatus().threads());
+        var status = this.getStatus();
+        LOGGER.info("Resource Burner CPU — burner thread #{} started, live threads: {}/{} cores ({}%), system CPU load: {}%", id, status.threads(), status.availableProcessors(), status.threadsPercentage(), status.systemCpuLoadPercentage());
+    }
+
+    // system-wide CPU load: 0.00-100.00; -1 when the JVM cannot measure it (e.g. first call)
+    private static BigDecimal systemCpuLoadPercentage() {
+        var cpuLoad = OS_MX_BEAN.getCpuLoad();
+        return cpuLoad >= 0 ? scale(BigDecimal.valueOf(cpuLoad * 100), 2) : BigDecimal.valueOf(-1);
     }
 }

@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static jbst.foundation.domain.tuples.TuplePercentage.progressTuplePercentage;
+
 /**
  * Burns RAM by retaining heap chunks (50MB every 10 seconds while growing).
  * <p>
@@ -58,6 +60,8 @@ public class ResourceBurnerRAM {
         this.lock.lock();
         try {
             this.growing = false;
+            var status = this.getStatus();
+            LOGGER.info("Resource Burner RAM — growth frozen, retained: {}MB ({}% of max heap), heap used: {}MB/{}MB ({}%)", status.retainedMB(), status.retainedPercentage(), status.heapUsedMB(), status.heapMaxMB(), status.heapUsedPercentage());
         } finally {
             this.lock.unlock();
         }
@@ -68,7 +72,8 @@ public class ResourceBurnerRAM {
         try {
             this.growing = false;
             this.retained.clear();
-            LOGGER.info("Resource Burner RAM — cleaned, all retained chunks released");
+            var status = this.getStatus();
+            LOGGER.info("Resource Burner RAM — cleaned, all retained chunks released, heap used: {}MB/{}MB ({}%)", status.heapUsedMB(), status.heapMaxMB(), status.heapUsedPercentage());
         } finally {
             this.lock.unlock();
         }
@@ -78,12 +83,17 @@ public class ResourceBurnerRAM {
         this.lock.lock();
         try {
             var runtime = Runtime.getRuntime();
+            var retainedMB = (long) this.retained.size() * CHUNK_SIZE_MB;
+            var heapUsedMB = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024);
+            var heapMaxMB = runtime.maxMemory() / (1024 * 1024);
             return new ResourceBurnerRamStatus(
                     this.growing,
                     this.retained.size(),
-                    (long) this.retained.size() * CHUNK_SIZE_MB,
-                    (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024),
-                    runtime.maxMemory() / (1024 * 1024)
+                    retainedMB,
+                    progressTuplePercentage(retainedMB, heapMaxMB).percentage(),
+                    heapUsedMB,
+                    heapMaxMB,
+                    progressTuplePercentage(heapUsedMB, heapMaxMB).percentage()
             );
         } finally {
             this.lock.unlock();
@@ -95,10 +105,12 @@ public class ResourceBurnerRAM {
             var chunk = new byte[CHUNK_SIZE_MB * 1024 * 1024];
             ThreadLocalRandom.current().nextBytes(chunk); // touch every page so RSS actually grows
             this.retained.add(chunk);
-            LOGGER.info("Resource Burner RAM — chunk #{} retained, total: {}MB", this.retained.size(), (long) this.retained.size() * CHUNK_SIZE_MB);
+            var status = this.getStatus();
+            LOGGER.info("Resource Burner RAM — chunk #{} retained, total: {}MB ({}% of max heap), heap used: {}MB/{}MB ({}%)", status.chunks(), status.retainedMB(), status.retainedPercentage(), status.heapUsedMB(), status.heapMaxMB(), status.heapUsedPercentage());
         } catch (OutOfMemoryError error) {
             this.growing = false;
-            LOGGER.warn("Resource Burner RAM — heap exhausted, growth stopped, retained: {}MB", (long) this.retained.size() * CHUNK_SIZE_MB);
+            var status = this.getStatus();
+            LOGGER.warn("Resource Burner RAM — heap exhausted, growth stopped, retained: {}MB ({}% of max heap), heap used: {}MB/{}MB ({}%)", status.retainedMB(), status.retainedPercentage(), status.heapUsedMB(), status.heapMaxMB(), status.heapUsedPercentage());
         }
     }
 }
