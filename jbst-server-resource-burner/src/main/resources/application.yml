@@ -1,0 +1,46 @@
+#file: noinspection SpringBootApplicationYaml
+
+# Spring: Tomcat request handling on virtual threads (Java 21)
+spring:
+  threads:
+    virtual:
+      enabled: true
+
+# Server
+server:
+  servlet:
+    context-path: /api
+
+# Spring Security: actuator endpoints (no security check)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ["health", "info"]
+
+# Jasypt
+jasypt:
+  encryptor:
+    algorithm: PBEWithMD5AndDES
+    iv-generator-classname: org.jasypt.iv.NoIvGenerator
+
+# Swagger
+springdoc:
+  swagger-ui:
+    tags-sorter: "alpha"
+
+# jbst
+jbst:
+  app:
+    name: jbstsrb
+    maven:
+      group-id: @project.groupId@
+      artifact-id: @project.artifactId@
+      version: v@project.version@
+    springdoc-enabled: true
+  async:
+    virtual-threads: true
+    thread-name-prefix: jbstsrb-async
+  events:
+    virtual-threads: true
+    thread-name-prefix: jbstsrb-events
