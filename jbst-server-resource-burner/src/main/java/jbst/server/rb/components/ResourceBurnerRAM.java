@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static jbst.foundation.domain.tuples.TuplePercentage.progressTuplePercentage;
@@ -47,7 +48,7 @@ public class ResourceBurnerRAM {
     public void tick() {
         this.lock.lock();
         try {
-            if (this.growing && System.nanoTime() - this.lastStepNanos >= this.everySeconds * 1_000_000_000L) {
+            if (this.growing && this.stepIntervalElapsed()) {
                 this.grow();
             }
         } finally {
@@ -116,6 +117,10 @@ public class ResourceBurnerRAM {
         } finally {
             this.lock.unlock();
         }
+    }
+
+    private boolean stepIntervalElapsed() {
+        return System.nanoTime() - this.lastStepNanos >= TimeUnit.SECONDS.toNanos(this.everySeconds);
     }
 
     private void grow() {

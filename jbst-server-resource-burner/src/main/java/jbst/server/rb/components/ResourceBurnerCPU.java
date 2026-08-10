@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
@@ -57,7 +58,7 @@ public class ResourceBurnerCPU {
     public void tick() {
         this.lock.lock();
         try {
-            if (this.growing && System.nanoTime() - this.lastStepNanos >= this.everySeconds * 1_000_000_000L) {
+            if (this.growing && this.stepIntervalElapsed()) {
                 this.step();
             }
         } finally {
@@ -122,6 +123,10 @@ public class ResourceBurnerCPU {
     @PreDestroy
     void destroy() {
         this.clean();
+    }
+
+    private boolean stepIntervalElapsed() {
+        return System.nanoTime() - this.lastStepNanos >= TimeUnit.SECONDS.toNanos(this.everySeconds);
     }
 
     private void step() {
