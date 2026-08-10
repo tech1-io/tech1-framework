@@ -4,7 +4,7 @@ services:
     restart: "no"
     container_name: jbst-server-iam
     networks:
-      - network-jbst-server-iam
+      - network-jbst
     ports:
       - "3002:3002"
     environment:
@@ -16,22 +16,22 @@ services:
     volumes:
       - ./application-server-iam-docker-mongo.yml:/application-server-iam-docker-mongo.yml
 
-  jbst-server-iam-database-mongodb:
+  jbst-database-mongodb:
     image: mongo:6.0.15
     restart: "no"
-    container_name: jbst-server-iam-database-mongodb
+    container_name: jbst-database-mongodb
     ports:
       - "3004:27017"
     networks:
-      - network-jbst-server-iam
+      - network-jbst
     volumes:
-      - volume-jbst-server-iam-mongodb:/data/db
+      - volume-jbst-mongodb:/data/db
 
 networks:
-  network-jbst-server-iam:
-    name: network-jbst-server-iam
+  network-jbst:
+    name: network-jbst
     driver: bridge
 
 volumes:
-  volume-jbst-server-iam-mongodb:
-    name: volume-jbst-server-iam-mongodb
+  volume-jbst-mongodb:
+    name: volume-jbst-mongodb
