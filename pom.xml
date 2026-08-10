@@ -29,6 +29,7 @@
         <!-- Servers -->
         <module>jbst-server-iam</module>
         <module>jbst-server-hardware-monitoring</module>
+        <module>jbst-server-resource-burner</module>
     </modules>
 
     <properties>

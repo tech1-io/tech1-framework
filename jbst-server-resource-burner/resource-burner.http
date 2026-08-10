@@ -1,0 +1,32 @@
+# Resource Burner API — IntelliJ HTTP Client
+# Select environment (dev/production) in the run gutter; base URLs live in http-client.env.json
+
+### Status
+GET {{baseUrl}}/resource-burner/status
+
+### CPU + RAM: start
+POST {{baseUrl}}/resource-burner/start
+
+### CPU + RAM: stop (freeze growth, keep load)
+POST {{baseUrl}}/resource-burner/stop
+
+### CPU + RAM: clean (release everything)
+POST {{baseUrl}}/resource-burner/clean
+
+### CPU: start
+POST {{baseUrl}}/resource-burner/cpu/start
+
+### CPU: stop
+POST {{baseUrl}}/resource-burner/cpu/stop
+
+### CPU: clean
+POST {{baseUrl}}/resource-burner/cpu/clean
+
+### RAM: start
+POST {{baseUrl}}/resource-burner/ram/start
+
+### RAM: stop
+POST {{baseUrl}}/resource-burner/ram/stop
+
+### RAM: clean
+POST {{baseUrl}}/resource-burner/ram/clean

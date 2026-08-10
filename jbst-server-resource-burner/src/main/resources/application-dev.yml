@@ -1,0 +1,10 @@
+#file: noinspection SpringBootApplicationYaml
+
+# Logging
+logging:
+  config: classpath:logback-console.xml
+
+# jbst
+jbst:
+  app:
+    name: jbstsrb-dev
