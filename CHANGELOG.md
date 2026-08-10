@@ -3,3 +3,4 @@
 — ci: re-enable docker image pushes; release.yml now builds and pushes images itself  
 — ci: publish jbst-server-resource-burner docker image; skip its maven package deploy  
 — feat: resource-burner growth-speed tuning — start endpoints accept everySeconds/threads/chunkMB; re-start retunes live  
+— fix: resource-burner CPU logs — sample system CPU load once per growth step (back-to-back getCpuLoad() calls read 0%)  
