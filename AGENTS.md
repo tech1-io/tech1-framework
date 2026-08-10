@@ -134,7 +134,7 @@ PostgreSQL schema is managed by **Liquibase**: `src/main/resources/postgres/chan
 - `websockets/`, `filters/jwt/`, `tokens/`, `handshakes/` — the JWT + STOMP WebSocket security machinery configured via `jbst.security.websockets`.
 
 ### Running the servers locally
-`run-mongodb.sh` / `run-postgres.sh` (IAM) and `run.sh` (hardware-monitoring) delegate to an external helper script `java-run-spring-boot-dev-profile-v4.sh` that must be on your `PATH`, and pass a Jasypt password (config values are Jasypt-encrypted, `PBEWithMD5AndDES`). Spin up the databases first via `docker/run-mongo.sh` or `docker/run-postgres.sh` (docker-compose). All apps use context path `/api`; Swagger UI lives at `{server}/api/swagger-ui/index.html` (dev IAM: http://localhost:3002/api/swagger-ui/index.html).
+`run-mongodb.sh` / `run-postgres.sh` (IAM) and `run.sh` (hardware-monitoring) delegate to an external helper script `java-run-spring-boot-dev-profile-v4.sh` that must be on your `PATH`, and pass a Jasypt password (config values are Jasypt-encrypted, `PBEWithMD5AndDES`). Spin up the databases first via `assets/docker/run-server-iam-mongo.sh` or `assets/docker/run-server-iam-postgres.sh` (docker-compose). All apps use context path `/api`; Swagger UI lives at `{server}/api/swagger-ui/index.html` (dev IAM: http://localhost:3002/api/swagger-ui/index.html).
 
 ## CI and Release Engineering
 

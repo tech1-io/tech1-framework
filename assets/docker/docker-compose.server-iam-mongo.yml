@@ -1,0 +1,37 @@
+services:
+  jbst-server-iam:
+    image: ghcr.io/yyluchkiv/jbst-server-iam:1.76-SNAPSHOT
+    restart: "no"
+    container_name: jbst-server-iam
+    networks:
+      - network-jbst-server-iam
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - SPRING_BOOT_PROFILE=mongodb
+      - CONFIG_LOCATIONS=classpath:application.yml,classpath:application-dev.yml,classpath:application-mongo.yml,file:/application-server-iam-docker-mongo.yml
+      - JASYPT_PASSWORD=JJJJBSTGH
+      - JVM_ARGUMENTS=-Xmx5g -XX:+UseZGC -XX:+ZGenerational --add-opens=java.base/java.time=ALL-UNNAMED
+    volumes:
+      - ./application-server-iam-docker-mongo.yml:/application-server-iam-docker-mongo.yml
+
+  jbst-server-iam-database-mongodb:
+    image: mongo:6.0.15
+    restart: "no"
+    container_name: jbst-server-iam-database-mongodb
+    ports:
+      - "3004:27017"
+    networks:
+      - network-jbst-server-iam
+    volumes:
+      - volume-jbst-server-iam-mongodb:/data/db
+
+networks:
+  network-jbst-server-iam:
+    name: network-jbst-server-iam
+    driver: bridge
+
+volumes:
+  volume-jbst-server-iam-mongodb:
+    name: volume-jbst-server-iam-mongodb
