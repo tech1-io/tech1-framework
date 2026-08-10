@@ -134,6 +134,8 @@ public class ResourceBurnerCPU {
         for (var i = 0; i < this.threadsPerStep; i++) {
             this.addBurner();
         }
+        var status = this.getStatus();
+        LOGGER.info("Resource Burner CPU — step: +{} burner threads, live threads: {}/{} cores ({}%), system CPU load: {}%", this.threadsPerStep, status.threads(), status.availableProcessors(), status.threadsPercentage(), status.systemCpuLoadPercentage());
     }
 
     private void addBurner() {
@@ -150,11 +152,12 @@ public class ResourceBurnerCPU {
                     this.sink = x;
                 });
         this.threads.add(thread);
-        var status = this.getStatus();
-        LOGGER.info("Resource Burner CPU — burner thread #{} started, live threads: {}/{} cores ({}%), system CPU load: {}%", id, status.threads(), status.availableProcessors(), status.threadsPercentage(), status.systemCpuLoadPercentage());
+        LOGGER.info("Resource Burner CPU — burner thread #{} started", id);
     }
 
-    // system-wide CPU load: 0.00-100.00; -1 when the JVM cannot measure it (e.g. first call)
+    // system-wide CPU load: 0.00-100.00; -1 when the JVM cannot measure it (e.g. first call).
+    // getCpuLoad() measures the interval since the previous call — back-to-back calls read ~0%,
+    // so sample at most once per growth step
     private static BigDecimal systemCpuLoadPercentage() {
         var cpuLoad = OS_MX_BEAN.getCpuLoad();
         return cpuLoad >= 0 ? scale(BigDecimal.valueOf(cpuLoad * 100), 2) : BigDecimal.valueOf(-1);
