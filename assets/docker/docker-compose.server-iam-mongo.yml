@@ -1,6 +1,6 @@
 services:
   jbst-server-iam:
-    image: ghcr.io/yyluchkiv/jbst-server-iam:1.76-SNAPSHOT
+    image: ghcr.io/yyluchkiv/jbst-server-iam:1.76
     restart: "no"
     container_name: jbst-server-iam
     networks:
