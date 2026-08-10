@@ -22,13 +22,22 @@ import static jbst.foundation.domain.numbers.JbstNumbers.scale;
 /**
  * Burns CPU by spinning daemon platform threads in a busy math loop.
  * <p>
- * Lifecycle: {@code start()} — begin growing (one extra burner thread every 10 seconds),
+ * Lifecycle: {@code start(everySeconds, threads)} — begin growing ({@code threads}
+ * extra burner threads every {@code everySeconds} seconds; calling it again while
+ * growing retunes the speed without restarting),
  * {@code stop()} — freeze growth but keep the current load (plateau),
  * {@code clean()} — stop growth and terminate all burner threads.
  */
 @Slf4j
 @Component
 public class ResourceBurnerCPU {
+
+    public static final int DEFAULT_EVERY_SECONDS = 10;
+    public static final int DEFAULT_THREADS_PER_STEP = 1;
+    public static final int MIN_EVERY_SECONDS = 1;
+    public static final int MAX_EVERY_SECONDS = 3600;
+    public static final int MIN_THREADS_PER_STEP = 1;
+    public static final int MAX_THREADS_PER_STEP = 256;
 
     private static final OperatingSystemMXBean OS_MX_BEAN = (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
 
@@ -38,27 +47,34 @@ public class ResourceBurnerCPU {
     // captured by each burner thread; clean() flips the current flag and replaces it
     private volatile AtomicBoolean burning = new AtomicBoolean(true);
     private volatile boolean growing = false;
+    private int everySeconds = DEFAULT_EVERY_SECONDS;
+    private int threadsPerStep = DEFAULT_THREADS_PER_STEP;
+    private long lastStepNanos = 0;
     @SuppressWarnings("unused")
     private volatile double sink; // critical: otherwise JIT eliminates the busy loop
 
-    @Scheduled(fixedRate = 10_000)
+    @Scheduled(fixedRate = 1_000)
     public void tick() {
         this.lock.lock();
         try {
-            if (this.growing) {
-                this.addBurner();
+            if (this.growing && System.nanoTime() - this.lastStepNanos >= this.everySeconds * 1_000_000_000L) {
+                this.step();
             }
         } finally {
             this.lock.unlock();
         }
     }
 
-    public void start() {
+    public void start(int everySeconds, int threadsPerStep) {
         this.lock.lock();
         try {
+            this.everySeconds = everySeconds;
+            this.threadsPerStep = threadsPerStep;
             if (!this.growing) {
                 this.growing = true;
-                this.addBurner();
+                this.step();
+            } else {
+                LOGGER.info("Resource Burner CPU — retuned, +{} threads every {}s", threadsPerStep, everySeconds);
             }
         } finally {
             this.lock.unlock();
@@ -94,6 +110,8 @@ public class ResourceBurnerCPU {
         var availableProcessors = Runtime.getRuntime().availableProcessors();
         return new ResourceBurnerCpuStatus(
                 this.growing,
+                this.everySeconds,
+                this.threadsPerStep,
                 liveThreads,
                 availableProcessors,
                 progressTuplePercentage(liveThreads, availableProcessors).percentage(),
@@ -104,6 +122,13 @@ public class ResourceBurnerCPU {
     @PreDestroy
     void destroy() {
         this.clean();
+    }
+
+    private void step() {
+        this.lastStepNanos = System.nanoTime();
+        for (var i = 0; i < this.threadsPerStep; i++) {
+            this.addBurner();
+        }
     }
 
     private void addBurner() {

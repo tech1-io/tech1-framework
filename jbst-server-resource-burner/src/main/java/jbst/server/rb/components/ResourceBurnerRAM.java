@@ -13,9 +13,11 @@ import java.util.concurrent.locks.ReentrantLock;
 import static jbst.foundation.domain.tuples.TuplePercentage.progressTuplePercentage;
 
 /**
- * Burns RAM by retaining heap chunks (50MB every 10 seconds while growing).
+ * Burns RAM by retaining heap chunks.
  * <p>
- * Lifecycle: {@code start()} — begin growing (one extra chunk every 10 seconds),
+ * Lifecycle: {@code start(everySeconds, chunkMB)} — begin growing (one extra
+ * {@code chunkMB}-sized chunk every {@code everySeconds} seconds; calling it again
+ * while growing retunes the speed without restarting),
  * {@code stop()} — freeze growth but keep the retained chunks (plateau),
  * {@code clean()} — stop growth and release all retained chunks.
  * <p>
@@ -26,17 +28,26 @@ import static jbst.foundation.domain.tuples.TuplePercentage.progressTuplePercent
 @Component
 public class ResourceBurnerRAM {
 
-    public static final int CHUNK_SIZE_MB = 50;
+    public static final int DEFAULT_EVERY_SECONDS = 10;
+    public static final int DEFAULT_CHUNK_MB = 50;
+    public static final int MIN_EVERY_SECONDS = 1;
+    public static final int MAX_EVERY_SECONDS = 3600;
+    public static final int MIN_CHUNK_MB = 1;
+    public static final int MAX_CHUNK_MB = 1024;
 
     private final ReentrantLock lock = new ReentrantLock();
     private final List<byte[]> retained = new ArrayList<>();
     private volatile boolean growing = false;
+    private int everySeconds = DEFAULT_EVERY_SECONDS;
+    private int chunkMB = DEFAULT_CHUNK_MB;
+    private long retainedBytes = 0;
+    private long lastStepNanos = 0;
 
-    @Scheduled(fixedRate = 10_000)
+    @Scheduled(fixedRate = 1_000)
     public void tick() {
         this.lock.lock();
         try {
-            if (this.growing) {
+            if (this.growing && System.nanoTime() - this.lastStepNanos >= this.everySeconds * 1_000_000_000L) {
                 this.grow();
             }
         } finally {
@@ -44,12 +55,16 @@ public class ResourceBurnerRAM {
         }
     }
 
-    public void start() {
+    public void start(int everySeconds, int chunkMB) {
         this.lock.lock();
         try {
+            this.everySeconds = everySeconds;
+            this.chunkMB = chunkMB;
             if (!this.growing) {
                 this.growing = true;
                 this.grow();
+            } else {
+                LOGGER.info("Resource Burner RAM — retuned, +{}MB every {}s", chunkMB, everySeconds);
             }
         } finally {
             this.lock.unlock();
@@ -72,6 +87,7 @@ public class ResourceBurnerRAM {
         try {
             this.growing = false;
             this.retained.clear();
+            this.retainedBytes = 0;
             var status = this.getStatus();
             LOGGER.info("Resource Burner RAM — cleaned, all retained chunks released, heap used: {}MB/{}MB ({}%)", status.heapUsedMB(), status.heapMaxMB(), status.heapUsedPercentage());
         } finally {
@@ -83,11 +99,13 @@ public class ResourceBurnerRAM {
         this.lock.lock();
         try {
             var runtime = Runtime.getRuntime();
-            var retainedMB = (long) this.retained.size() * CHUNK_SIZE_MB;
+            var retainedMB = this.retainedBytes / (1024 * 1024);
             var heapUsedMB = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024);
             var heapMaxMB = runtime.maxMemory() / (1024 * 1024);
             return new ResourceBurnerRamStatus(
                     this.growing,
+                    this.everySeconds,
+                    this.chunkMB,
                     this.retained.size(),
                     retainedMB,
                     progressTuplePercentage(retainedMB, heapMaxMB).percentage(),
@@ -101,10 +119,12 @@ public class ResourceBurnerRAM {
     }
 
     private void grow() {
+        this.lastStepNanos = System.nanoTime();
         try {
-            var chunk = new byte[CHUNK_SIZE_MB * 1024 * 1024];
+            var chunk = new byte[this.chunkMB * 1024 * 1024];
             ThreadLocalRandom.current().nextBytes(chunk); // touch every page so RSS actually grows
             this.retained.add(chunk);
+            this.retainedBytes += chunk.length;
             var status = this.getStatus();
             LOGGER.info("Resource Burner RAM — chunk #{} retained, total: {}MB ({}% of max heap), heap used: {}MB/{}MB ({}%)", status.chunks(), status.retainedMB(), status.retainedPercentage(), status.heapUsedMB(), status.heapMaxMB(), status.heapUsedPercentage());
         } catch (OutOfMemoryError error) {
