@@ -11,6 +11,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Burns CPU by spinning daemon platform threads in a busy math loop.
@@ -23,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class ResourceBurnerCPU {
 
+    private final ReentrantLock lock = new ReentrantLock();
     private final AtomicInteger counter = new AtomicInteger();
     private final List<Thread> threads = new CopyOnWriteArrayList<>();
     // captured by each burner thread; clean() flips the current flag and replaces it
@@ -33,28 +35,48 @@ public class ResourceBurnerCPU {
 
     @Scheduled(fixedRate = 10_000)
     public void tick() {
-        if (this.growing) {
-            this.addBurner();
+        this.lock.lock();
+        try {
+            if (this.growing) {
+                this.addBurner();
+            }
+        } finally {
+            this.lock.unlock();
         }
     }
 
-    public synchronized void start() {
-        if (!this.growing) {
-            this.growing = true;
-            this.addBurner();
+    public void start() {
+        this.lock.lock();
+        try {
+            if (!this.growing) {
+                this.growing = true;
+                this.addBurner();
+            }
+        } finally {
+            this.lock.unlock();
         }
     }
 
-    public synchronized void stop() {
-        this.growing = false;
+    public void stop() {
+        this.lock.lock();
+        try {
+            this.growing = false;
+        } finally {
+            this.lock.unlock();
+        }
     }
 
-    public synchronized void clean() {
-        this.growing = false;
-        this.burning.set(false);
-        this.burning = new AtomicBoolean(true);
-        this.threads.clear();
-        LOGGER.info("Resource Burner CPU — cleaned, all burner threads terminating");
+    public void clean() {
+        this.lock.lock();
+        try {
+            this.growing = false;
+            this.burning.set(false);
+            this.burning = new AtomicBoolean(true);
+            this.threads.clear();
+            LOGGER.info("Resource Burner CPU — cleaned, all burner threads terminating");
+        } finally {
+            this.lock.unlock();
+        }
     }
 
     public ResourceBurnerCpuStatus getStatus() {

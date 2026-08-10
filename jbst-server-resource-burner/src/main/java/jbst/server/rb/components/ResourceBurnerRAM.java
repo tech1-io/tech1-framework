@@ -6,9 +6,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Burns RAM by retaining heap chunks (50MB every 10 seconds while growing).
@@ -26,42 +26,68 @@ public class ResourceBurnerRAM {
 
     public static final int CHUNK_SIZE_MB = 50;
 
-    private final List<byte[]> retained = Collections.synchronizedList(new ArrayList<>());
+    private final ReentrantLock lock = new ReentrantLock();
+    private final List<byte[]> retained = new ArrayList<>();
     private volatile boolean growing = false;
 
     @Scheduled(fixedRate = 10_000)
     public void tick() {
-        if (this.growing) {
-            this.grow();
+        this.lock.lock();
+        try {
+            if (this.growing) {
+                this.grow();
+            }
+        } finally {
+            this.lock.unlock();
         }
     }
 
-    public synchronized void start() {
-        if (!this.growing) {
-            this.growing = true;
-            this.grow();
+    public void start() {
+        this.lock.lock();
+        try {
+            if (!this.growing) {
+                this.growing = true;
+                this.grow();
+            }
+        } finally {
+            this.lock.unlock();
         }
     }
 
-    public synchronized void stop() {
-        this.growing = false;
+    public void stop() {
+        this.lock.lock();
+        try {
+            this.growing = false;
+        } finally {
+            this.lock.unlock();
+        }
     }
 
-    public synchronized void clean() {
-        this.growing = false;
-        this.retained.clear();
-        LOGGER.info("Resource Burner RAM — cleaned, all retained chunks released");
+    public void clean() {
+        this.lock.lock();
+        try {
+            this.growing = false;
+            this.retained.clear();
+            LOGGER.info("Resource Burner RAM — cleaned, all retained chunks released");
+        } finally {
+            this.lock.unlock();
+        }
     }
 
     public ResourceBurnerRamStatus getStatus() {
-        var runtime = Runtime.getRuntime();
-        return new ResourceBurnerRamStatus(
-                this.growing,
-                this.retained.size(),
-                (long) this.retained.size() * CHUNK_SIZE_MB,
-                (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024),
-                runtime.maxMemory() / (1024 * 1024)
-        );
+        this.lock.lock();
+        try {
+            var runtime = Runtime.getRuntime();
+            return new ResourceBurnerRamStatus(
+                    this.growing,
+                    this.retained.size(),
+                    (long) this.retained.size() * CHUNK_SIZE_MB,
+                    (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024),
+                    runtime.maxMemory() / (1024 * 1024)
+            );
+        } finally {
+            this.lock.unlock();
+        }
     }
 
     private void grow() {
