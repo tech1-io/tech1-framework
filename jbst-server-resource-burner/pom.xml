@@ -32,6 +32,14 @@
             </resource>
         </resources>
         <plugins>
+            <!-- Deployment: shipped as a docker image (like jbst-server-iam), not a maven package -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-deploy-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
             <!-- Spring Boot -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>

@@ -13,6 +13,7 @@ on:
 env:
   DOCKER_REGISTRY: ghcr.io
   DOCKER_IMAGE_SERVER_IAM: yyluchkiv/jbst-server-iam
+  DOCKER_IMAGE_SERVER_RESOURCE_BURNER: yyluchkiv/jbst-server-resource-burner
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -57,16 +58,25 @@ jobs:
         if: env.MAVEN_DEPLOYMENT_ENABLED == 'true'
         run: ./mvnw clean -DskipTests -Dmaven.test.skip deploy -Pgithub
 
+      # NOTE: pushes made by release.yml use GITHUB_TOKEN and therefore never trigger this
+      # workflow — on the one-click release path the docker images are built and pushed by
+      # release.yml itself. These flag-gated steps cover manual releases pushed by a human
+      # (next-release.sh flips DOCKER_PUSH_ENABLED on) and workflow_dispatch re-runs.
       - name: "docker login"
-        # if: env.DOCKER_PUSH_ENABLED == 'true'
-        if: false
+        if: env.DOCKER_PUSH_ENABLED == 'true'
         run: docker login ${{ env.DOCKER_REGISTRY }} -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
 
       - name: "docker [server-iam]"
-        # if: env.DOCKER_PUSH_ENABLED == 'true'
-        if: false
+        if: env.DOCKER_PUSH_ENABLED == 'true'
         run: |
           cd jbst-server-iam
           docker build -t ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_SERVER_IAM }}:${{ env.DOCKER_VERSION }} .
           docker push ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_SERVER_IAM }}:${{ env.DOCKER_VERSION }}
+
+      - name: "docker [server-resource-burner]"
+        if: env.DOCKER_PUSH_ENABLED == 'true'
+        run: |
+          cd jbst-server-resource-burner
+          docker build -t ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_SERVER_RESOURCE_BURNER }}:${{ env.DOCKER_VERSION }} .
+          docker push ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_SERVER_RESOURCE_BURNER }}:${{ env.DOCKER_VERSION }}
 
