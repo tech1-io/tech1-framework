@@ -3,8 +3,6 @@ package jbst.server.rb.components;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.concurrent.TimeUnit;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ResourceBurnerRAMTest {
@@ -77,15 +75,14 @@ class ResourceBurnerRAMTest {
     }
 
     @Test
-    void schedulerGrowsAtConfiguredInterval() throws InterruptedException {
+    void tickDoesNothingBeforeIntervalElapses() {
+        // Arrange
+        this.component.start(3600, 1);
+
         // Act
-        this.component.start(1, 1);
+        this.component.tick();
 
         // Assert
-        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-        while (this.component.getStatus().chunks() < 2 && System.nanoTime() < deadline) {
-            Thread.sleep(100);
-        }
-        assertThat(this.component.getStatus().chunks()).isGreaterThanOrEqualTo(2);
+        assertThat(this.component.getStatus().chunks()).isEqualTo(1);
     }
 }
