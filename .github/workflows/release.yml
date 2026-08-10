@@ -4,6 +4,11 @@ name: release
 on:
   workflow_dispatch:
 
+env:
+  DOCKER_REGISTRY: ghcr.io
+  DOCKER_IMAGE_SERVER_IAM: yyluchkiv/jbst-server-iam
+  DOCKER_IMAGE_SERVER_RESOURCE_BURNER: yyluchkiv/jbst-server-resource-burner
+
 concurrency:
   group: release
   cancel-in-progress: false
@@ -68,6 +73,7 @@ jobs:
             exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
           echo "releasing $TAG"
 
       - name: "release notes [CHANGELOG.md]"
@@ -84,6 +90,25 @@ jobs:
       # assumed green from the regular CI run on the last snapshot push
       - name: "maven [github packages]"
         run: ./mvnw clean -DskipTests -Dmaven.test.skip deploy -Pgithub
+
+      # docker images must be pushed here: the RELEASE/SNAPSHOT commits below are pushed
+      # with GITHUB_TOKEN and never trigger main.yml, so its flag-gated docker steps only
+      # cover manual (human-pushed) releases. The deploy step above already produced the
+      # release-versioned target/app.jar for each server module.
+      - name: "docker login"
+        run: docker login ${{ env.DOCKER_REGISTRY }} -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "docker [server-iam]"
+        run: |
+          cd jbst-server-iam
+          docker build -t ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_SERVER_IAM }}:${{ steps.version.outputs.version }} .
+          docker push ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_SERVER_IAM }}:${{ steps.version.outputs.version }}
+
+      - name: "docker [server-resource-burner]"
+        run: |
+          cd jbst-server-resource-burner
+          docker build -t ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_SERVER_RESOURCE_BURNER }}:${{ steps.version.outputs.version }} .
+          docker push ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_SERVER_RESOURCE_BURNER }}:${{ steps.version.outputs.version }}
 
       - name: "git push [RELEASE]"
         run: |

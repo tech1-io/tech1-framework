@@ -67,8 +67,12 @@ jobs:
 
       # Delete packages - package-type: container
 
+      # continue-on-error: the step fails when the container package does not exist yet
+      # (nothing pushed since docker pushes were re-enabled) — that must not fail the
+      # whole housekeeping run
+
       - name: "delete container package untagged versions [jbst-server-iam]"
-        if: false
+        continue-on-error: true
         uses: actions/delete-package-versions@v5
         with:
           owner: ${{ env.PACKAGE_OWNER }}
@@ -78,11 +82,31 @@ jobs:
           delete-only-untagged-versions: true
 
       - name: "delete container package [jbst-server-iam]"
-        if: false
+        continue-on-error: true
         uses: actions/delete-package-versions@v5
         with:
           owner: ${{ env.PACKAGE_OWNER }}
           package-name: 'jbst-server-iam'
+          package-type: 'container'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-versions-to-keep: ${{ env.KEEP_COUNT_CONTAINERS }}
+
+      - name: "delete container package untagged versions [jbst-server-resource-burner]"
+        continue-on-error: true
+        uses: actions/delete-package-versions@v5
+        with:
+          owner: ${{ env.PACKAGE_OWNER }}
+          package-name: 'jbst-server-resource-burner'
+          package-type: 'container'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          delete-only-untagged-versions: true
+
+      - name: "delete container package [jbst-server-resource-burner]"
+        continue-on-error: true
+        uses: actions/delete-package-versions@v5
+        with:
+          owner: ${{ env.PACKAGE_OWNER }}
+          package-name: 'jbst-server-resource-burner'
           package-type: 'container'
           token: ${{ secrets.GITHUB_TOKEN }}
           min-versions-to-keep: ${{ env.KEEP_COUNT_CONTAINERS }}
