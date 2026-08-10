@@ -3,6 +3,8 @@ package jbst.server.rb.components;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.TimeUnit;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ResourceBurnerCPUTest {
@@ -71,14 +73,15 @@ class ResourceBurnerCPUTest {
     }
 
     @Test
-    void tickDoesNothingBeforeIntervalElapses() {
-        // Arrange
-        this.component.start(3600, 1);
-
+    void schedulerGrowsAtConfiguredInterval() throws InterruptedException {
         // Act
-        this.component.tick();
+        this.component.start(1, 1);
 
         // Assert
-        assertThat(this.component.getStatus().threads()).isEqualTo(1);
+        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (this.component.getStatus().threads() < 2 && System.nanoTime() < deadline) {
+            Thread.sleep(100);
+        }
+        assertThat(this.component.getStatus().threads()).isGreaterThanOrEqualTo(2);
     }
 }

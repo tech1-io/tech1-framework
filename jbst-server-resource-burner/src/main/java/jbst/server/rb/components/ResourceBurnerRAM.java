@@ -1,19 +1,26 @@
 package jbst.server.rb.components;
 
+import jakarta.annotation.PreDestroy;
 import jbst.server.rb.domain.ResourceBurnerRamStatus;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static jbst.foundation.domain.tuples.TuplePercentage.progressTuplePercentage;
 
 /**
  * Burns RAM by retaining heap chunks.
+ * <p>
+ * Growth steps are self-scheduled on a single-threaded {@link ScheduledExecutorService}
+ * at the configured interval — no Spring scheduling involved.
  * <p>
  * Lifecycle: {@code start(everySeconds, chunkMB)} — begin growing (one extra
  * {@code chunkMB}-sized chunk every {@code everySeconds} seconds; calling it again
@@ -37,33 +44,27 @@ public class ResourceBurnerRAM {
 
     private final ReentrantLock lock = new ReentrantLock();
     private final List<byte[]> retained = new ArrayList<>();
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(
+            Thread.ofPlatform().daemon().name("resource-burner-ram-scheduler").factory()
+    );
     private volatile boolean growing = false;
     private int everySeconds = DEFAULT_EVERY_SECONDS;
     private int chunkMB = DEFAULT_CHUNK_MB;
     private long retainedBytes = 0;
-    private long lastStepNanos = 0;
-
-    @Scheduled(fixedRate = 1_000)
-    public void tick() {
-        this.lock.lock();
-        try {
-            if (this.growing && System.nanoTime() - this.lastStepNanos >= this.everySeconds * 1_000_000_000L) {
-                this.grow();
-            }
-        } finally {
-            this.lock.unlock();
-        }
-    }
+    private ScheduledFuture<?> growthTask = null;
 
     public void start(int everySeconds, int chunkMB) {
         this.lock.lock();
         try {
             this.everySeconds = everySeconds;
             this.chunkMB = chunkMB;
+            var retuned = this.growing;
             if (!this.growing) {
                 this.growing = true;
                 this.grow();
-            } else {
+            }
+            this.reschedule();
+            if (retuned) {
                 LOGGER.info("Resource Burner RAM — retuned, +{}MB every {}s", chunkMB, everySeconds);
             }
         } finally {
@@ -75,6 +76,7 @@ public class ResourceBurnerRAM {
         this.lock.lock();
         try {
             this.growing = false;
+            this.cancelGrowthTask();
             var status = this.getStatus();
             LOGGER.info("Resource Burner RAM — growth frozen, retained: {}MB ({}% of max heap), heap used: {}MB/{}MB ({}%)", status.retainedMB(), status.retainedPercentage(), status.heapUsedMB(), status.heapMaxMB(), status.heapUsedPercentage());
         } finally {
@@ -86,6 +88,7 @@ public class ResourceBurnerRAM {
         this.lock.lock();
         try {
             this.growing = false;
+            this.cancelGrowthTask();
             this.retained.clear();
             this.retainedBytes = 0;
             var status = this.getStatus();
@@ -118,8 +121,36 @@ public class ResourceBurnerRAM {
         }
     }
 
+    @PreDestroy
+    void destroy() {
+        this.clean();
+        this.scheduler.shutdownNow();
+    }
+
+    private void reschedule() {
+        this.cancelGrowthTask();
+        this.growthTask = this.scheduler.scheduleAtFixedRate(this::scheduledGrow, this.everySeconds, this.everySeconds, TimeUnit.SECONDS);
+    }
+
+    private void cancelGrowthTask() {
+        if (this.growthTask != null) {
+            this.growthTask.cancel(false);
+            this.growthTask = null;
+        }
+    }
+
+    private void scheduledGrow() {
+        this.lock.lock();
+        try {
+            if (this.growing) {
+                this.grow();
+            }
+        } finally {
+            this.lock.unlock();
+        }
+    }
+
     private void grow() {
-        this.lastStepNanos = System.nanoTime();
         try {
             var chunk = new byte[this.chunkMB * 1024 * 1024];
             ThreadLocalRandom.current().nextBytes(chunk); // touch every page so RSS actually grows
@@ -129,6 +160,7 @@ public class ResourceBurnerRAM {
             LOGGER.info("Resource Burner RAM — chunk #{} retained, total: {}MB ({}% of max heap), heap used: {}MB/{}MB ({}%)", status.chunks(), status.retainedMB(), status.retainedPercentage(), status.heapUsedMB(), status.heapMaxMB(), status.heapUsedPercentage());
         } catch (OutOfMemoryError error) {
             this.growing = false;
+            this.cancelGrowthTask();
             var status = this.getStatus();
             LOGGER.warn("Resource Burner RAM — heap exhausted, growth stopped, retained: {}MB ({}% of max heap), heap used: {}MB/{}MB ({}%)", status.retainedMB(), status.retainedPercentage(), status.heapUsedMB(), status.heapMaxMB(), status.heapUsedPercentage());
         }

@@ -4,14 +4,17 @@ import com.sun.management.OperatingSystemMXBean;
 import jakarta.annotation.PreDestroy;
 import jbst.server.rb.domain.ResourceBurnerCpuStatus;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.lang.management.ManagementFactory;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
@@ -21,6 +24,9 @@ import static jbst.foundation.domain.numbers.JbstNumbers.scale;
 
 /**
  * Burns CPU by spinning daemon platform threads in a busy math loop.
+ * <p>
+ * Growth steps are self-scheduled on a single-threaded {@link ScheduledExecutorService}
+ * at the configured interval — no Spring scheduling involved.
  * <p>
  * Lifecycle: {@code start(everySeconds, threads)} — begin growing ({@code threads}
  * extra burner threads every {@code everySeconds} seconds; calling it again while
@@ -44,36 +50,30 @@ public class ResourceBurnerCPU {
     private final ReentrantLock lock = new ReentrantLock();
     private final AtomicInteger counter = new AtomicInteger();
     private final List<Thread> threads = new CopyOnWriteArrayList<>();
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(
+            Thread.ofPlatform().daemon().name("resource-burner-cpu-scheduler").factory()
+    );
     // captured by each burner thread; clean() flips the current flag and replaces it
     private volatile AtomicBoolean burning = new AtomicBoolean(true);
     private volatile boolean growing = false;
     private int everySeconds = DEFAULT_EVERY_SECONDS;
     private int threadsPerStep = DEFAULT_THREADS_PER_STEP;
-    private long lastStepNanos = 0;
+    private ScheduledFuture<?> growthTask = null;
     @SuppressWarnings("unused")
     private volatile double sink; // critical: otherwise JIT eliminates the busy loop
-
-    @Scheduled(fixedRate = 1_000)
-    public void tick() {
-        this.lock.lock();
-        try {
-            if (this.growing && System.nanoTime() - this.lastStepNanos >= this.everySeconds * 1_000_000_000L) {
-                this.step();
-            }
-        } finally {
-            this.lock.unlock();
-        }
-    }
 
     public void start(int everySeconds, int threadsPerStep) {
         this.lock.lock();
         try {
             this.everySeconds = everySeconds;
             this.threadsPerStep = threadsPerStep;
+            var retuned = this.growing;
             if (!this.growing) {
                 this.growing = true;
                 this.step();
-            } else {
+            }
+            this.reschedule();
+            if (retuned) {
                 LOGGER.info("Resource Burner CPU — retuned, +{} threads every {}s", threadsPerStep, everySeconds);
             }
         } finally {
@@ -85,6 +85,7 @@ public class ResourceBurnerCPU {
         this.lock.lock();
         try {
             this.growing = false;
+            this.cancelGrowthTask();
             var status = this.getStatus();
             LOGGER.info("Resource Burner CPU — growth frozen, live threads: {}/{} cores ({}%), system CPU load: {}%", status.threads(), status.availableProcessors(), status.threadsPercentage(), status.systemCpuLoadPercentage());
         } finally {
@@ -96,6 +97,7 @@ public class ResourceBurnerCPU {
         this.lock.lock();
         try {
             this.growing = false;
+            this.cancelGrowthTask();
             this.burning.set(false);
             this.burning = new AtomicBoolean(true);
             this.threads.clear();
@@ -122,10 +124,33 @@ public class ResourceBurnerCPU {
     @PreDestroy
     void destroy() {
         this.clean();
+        this.scheduler.shutdownNow();
+    }
+
+    private void reschedule() {
+        this.cancelGrowthTask();
+        this.growthTask = this.scheduler.scheduleAtFixedRate(this::scheduledStep, this.everySeconds, this.everySeconds, TimeUnit.SECONDS);
+    }
+
+    private void cancelGrowthTask() {
+        if (this.growthTask != null) {
+            this.growthTask.cancel(false);
+            this.growthTask = null;
+        }
+    }
+
+    private void scheduledStep() {
+        this.lock.lock();
+        try {
+            if (this.growing) {
+                this.step();
+            }
+        } finally {
+            this.lock.unlock();
+        }
     }
 
     private void step() {
-        this.lastStepNanos = System.nanoTime();
         for (var i = 0; i < this.threadsPerStep; i++) {
             this.addBurner();
         }
